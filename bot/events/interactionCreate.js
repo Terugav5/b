@@ -150,10 +150,10 @@ async function handleSelectMenus(interaction) {
 
 async function handleButtons(interaction) {
     const { customId, user, guild } = interaction;
-    const dbData = await db.get();
 
     if (customId === 'mediator_join') {
         await interaction.deferReply({ ephemeral: true });
+        const dbData = await db.get();
         const config = dbData.config;
         if (!config.mediatorRole) return interaction.editReply({ content: 'Cargo de mediador não configurado.' });
 
@@ -175,6 +175,7 @@ async function handleButtons(interaction) {
 
     } else if (customId === 'mediator_leave') {
         await interaction.deferReply({ ephemeral: true });
+        const dbData = await db.get();
         if (!dbData.mediators[user.id] || !dbData.mediators[user.id].online) {
             return interaction.editReply({ content: 'Você não está online no painel de mediadores.' });
         }
@@ -187,23 +188,31 @@ async function handleButtons(interaction) {
 
     } else if (customId.startsWith('join_')) {
         await interaction.deferReply({ ephemeral: true });
+        const dbData = await db.get();
         await handleQueueJoin(interaction, dbData);
     } else if (customId.startsWith('leave_')) {
         await interaction.deferReply({ ephemeral: true });
+        const dbData = await db.get();
         await handleQueueLeave(interaction, dbData);
     } else if (customId.startsWith('match_confirm_')) {
+        await interaction.deferReply({ ephemeral: true });
+        const dbData = await db.get();
         await handleMatchConfirm(interaction, dbData);
     } else if (customId.startsWith('match_close_')) {
+        await interaction.deferReply({ ephemeral: false });
+        const dbData = await db.get();
         await handleMatchClose(interaction, dbData);
     } else if (customId.startsWith('copy_pix_key_')) {
+        await interaction.deferReply({ ephemeral: true });
+        const dbData = await db.get();
         const mediatorId = customId.split('_')[3];
-        const mediators = await db.get('mediators') || {};
+        const mediators = dbData.mediators || {};
         const mediatorData = mediators[mediatorId];
 
         if (mediatorData && mediatorData.pix) {
-            await interaction.reply({ content: mediatorData.pix, ephemeral: true });
+            await interaction.editReply({ content: mediatorData.pix });
         } else {
-            await interaction.reply({ content: 'Não foi possível encontrar a chave Pix deste mediador.', ephemeral: true });
+            await interaction.editReply({ content: 'Não foi possível encontrar a chave Pix deste mediador.' });
         }
     }
 }
@@ -477,14 +486,15 @@ async function handleMatchConfirm(interaction, dbData) {
     const activeMatches = dbData.activeMatches || [];
     const match = activeMatches.find(m => m.channelId === channel.id);
 
-    if (!match) return interaction.reply({ content: 'Partida não encontrada.', ephemeral: true });
-    if (!match.players.includes(user.id)) return interaction.reply({ content: 'Você não é um jogador desta partida.', ephemeral: true });
-    if (match.confirmed.includes(user.id)) return interaction.reply({ content: 'Você já confirmou.', ephemeral: true });
+    if (!match) return interaction.editReply({ content: 'Partida não encontrada.' });
+    if (!match.players.includes(user.id)) return interaction.editReply({ content: 'Você não é um jogador desta partida.' });
+    if (match.confirmed.includes(user.id)) return interaction.editReply({ content: 'Você já confirmou.' });
 
     match.confirmed.push(user.id);
     await db.set('activeMatches', activeMatches);
 
-    await interaction.reply({ content: `${user} confirmou! (${match.confirmed.length}/${match.players.length})` });
+    await channel.send({ content: `${user} confirmou! (${match.confirmed.length}/${match.players.length})` });
+    await interaction.editReply({ content: 'Você confirmou a partida.' });
 
     if (match.confirmed.length === match.players.length) {
         const mediatorData = dbData.mediators[mediatorId];
@@ -546,7 +556,7 @@ async function handleMatchConfirm(interaction, dbData) {
 
 async function handleMatchClose(interaction, dbData) {
     const { channel } = interaction;
-    await interaction.reply('Encerrando canal em 5 segundos...');
+    await interaction.editReply('Encerrando canal em 5 segundos...');
     setTimeout(() => channel.delete().catch(() => { }), 5000);
 
     const activeMatches = dbData.activeMatches || [];

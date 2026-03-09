@@ -17,6 +17,9 @@ async function ensureMediatorPanelMessage(client, guild) {
 
     if (config.mediatorMessageId) {
         panelMessage = await channel.messages.fetch(config.mediatorMessageId).catch(() => null);
+        if (panelMessage && panelMessage.author.id !== client.user.id) {
+            panelMessage = null;
+        }
     }
 
     if (!panelMessage) {
@@ -75,9 +78,13 @@ async function updateMediatorPanel(client, guild) {
 
         const embedSettings = dbData.embedSettings?.mediator || {};
 
+        const description = onlineMediators
+            ? (embedSettings.description || '{mediators}').replace('{mediators}', onlineMediators)
+            : 'Não há mediadores online no momento.';
+
         const embed = new EmbedBuilder()
             .setTitle(embedSettings.title || 'Painel de Mediadores')
-            .setDescription(onlineMediators || 'Não há mediadores online no momento.')
+            .setDescription(description)
             .setColor(embedSettings.color || 'Blue')
             .setTimestamp();
 

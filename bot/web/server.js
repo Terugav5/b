@@ -147,7 +147,10 @@ function startAdminPanel(client) {
             embedSettings.mediator = {
                 ...(embedSettings.mediator || {}),
                 color: req.body.color || '',
-                title: req.body.title || ''
+                title: req.body.title || '',
+                description: req.body.description || '',
+                image: req.body.image || '',
+                footer: req.body.footer || ''
             };
 
             await db.set('embedSettings', embedSettings);
@@ -243,17 +246,17 @@ function renderLogin(errorMessage = '') {
   <title>Login | Painel Admin</title>
   <style>
     :root {
-      --bg: #0a0a0f;
-      --surface: #12121a;
-      --surface-hover: #1a1a25;
-      --border: #2a2a3a;
+      --bg: #0d0d0d;
+      --surface: #1c1c1c;
+      --surface-hover: #3a3a3a;
+      --border: #3a3a3a;
       --text: #ffffff;
-      --text-muted: #8b8b9a;
-      --accent: #6366f1;
-      --accent-hover: #4f46e5;
-      --error: #ef4444;
+      --text-muted: #808080;
+      --accent: #e50914;
+      --accent-hover: #f40612;
+      --error: #e50914;
       --success: #22c55e;
-      --shadow: 0 0 40px rgba(99, 102, 241, 0.15);
+      --shadow: 0 0 40px rgba(229, 9, 20, 0.15);
     }
     
     * { 
@@ -402,7 +405,9 @@ function renderLogin(errorMessage = '') {
 <body>
   <div class="login-container">
     <div class="login-card">
-      <div class="logo">⚡</div>
+      <div class="logo">
+      <img src="https://lh3.googleusercontent.com/rd-gg-dl/AOI_d_9zDC6A-1yjRNx-nmwDNTBfpteTcTS145Dp5E8JJt6OoWFNM1UyzVqhly5OhYphvk7ni3g-QrJLqFILb_LtH5MI6cdvqRBK_893hVYKf5wC_tTaKzrLwIbG6N0Obs-g8BojDYoIGOvTo8EId5QcDuw2hhBXO88p8aWtpN3dhYWckQkopwvICiP5Qg73eeLa2CJ4leMFQc3DSceKNCozoP4Fw6kmgdsvl_iu1rxLTxWBVGqKBPP8SxrEqt_Rq-VxRnBsxkb-L9G8AEGFr6NrJfZBXP99qTlDyr7MZ-161GEcbGXW4r1jtANXZJuBUFDBzNlhtv1_0OMQ7K0fHQv5D4tkB8gIGFooGSWWGpwKzv4dGrjLr6ivZs2litkh7SiVTIdr8GG5caWzuLojXd0zCkbiI_O0E3_kk8ZnPwsnPiHPJmXMsaq4D744Pf3w3dokiwUe3uIoUvArK_GSer8MrfTjBvTXEQYRCFhbPyT65lzIw3OMald9bh8d-f8P8ZN_4Jj9_w6yzSV5W2sx0P87FsEHue4apCa--enpptbRQISTMeWpuDqPxyiDD8YZDTWWQGQ6PLRGFvViBYW6rM-6ZRZktjYC6q08UF-VKN5RIpDdAYDc2WGDS6SvYZqXQ-sZxH-7dtwBlhtF9NULinETPGC5PlbGN24M4lSh1T4nbYZk61jylR79ScTUqQHcOR2AmhZ242h81L_9md3Ti7_-dWvCOPEFeNl_eS3p57nK9DE0NgenQCxt8KzAf16b7Ge_9gBrkhELn22I8FTJufAp1GOMmdlnli4RlDO-e9mBy0WKeLXWNKO6CWBCPzQz-WpqOy2UDRFqR1OEnirsQRBqwYB8cQkwAzw6e2EzCdc-uhrap1fD-JPSnOEdDtI66LYv5zx3My4UNi8yiLb7nuL9VUvmCSNLceeaBP1EPa6aReY4N84zIKV3BUQni-rs9RTZ6lfC2Wa4RLWG0mWqpi49jskuDV7s8i3j4R5jXCronsa6cEY3mEFDm2n8Qc4NKHw2qvz6b6Z8dbNJ2IkGfmANOW0r3tbNReai8ORMXXEbltBFqJbPKYbxIPCDGD3NsgzxQfQEnHP64dz7tri-irJzHe10eZJLx2H8Zqy7sjkHtiMvMm8yAuArJystH8YifFxo4R5PrXkZsX3yH3VVFp2sPXtAWX9TBhNOLVXRnc7L3J2INOMv8JVMrq6RV4uTDEDcG6Qf6XJv9xip_ofTNPdSB2xLiUYIHKY9D_57jbRBmmDLbRuZ5ZoRSxaeTw=s1024-rj">
+      </div>
       <h1>Bem-vindo de volta</h1>
       <p class="subtitle">Painel de administração do bot</p>
       
@@ -1711,6 +1716,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
                 <div class="form-group">
                   <label class="form-label">Descrição</label>
                   <textarea name="description" class="form-control" placeholder="Use {mode}, {type}, {value}, {players}, {playerCount}">${escapeHtml(queueStyle.description || '')}</textarea>
+                  <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Variáveis disponíveis: <code>{mode}</code>, <code>{type}</code>, <code>{value}</code>, <code>{players}</code>, <code>{playerCount}</code></p>
                 </div>
                 
                 <div class="form-row">
@@ -1740,19 +1746,36 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
             <div class="card-header">
               <div>
                 <div class="card-title">Painel de Mediadores</div>
-                <div class="card-subtitle">Cor e título do painel</div>
+                <div class="card-subtitle">Personalize a embed do painel</div>
               </div>
             </div>
             <div class="card-body">
               <form class="ajax-form" method="post" action="/admin/embed-settings/mediator">
-                <div class="form-group">
-                  <label class="form-label">Título</label>
-                  <input type="text" name="title" class="form-control" placeholder="Painel de Mediadores" value="${escapeHtml(mediatorStyle.title || '')}">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">Cor (hex)</label>
+                    <input type="text" name="color" class="form-control" placeholder="#3b82f6" value="${escapeHtml(mediatorStyle.color || '')}">
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Título</label>
+                    <input type="text" name="title" class="form-control" placeholder="Painel de Mediadores" value="${escapeHtml(mediatorStyle.title || '')}">
+                  </div>
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label">Cor (hex)</label>
-                  <input type="text" name="color" class="form-control" placeholder="#3b82f6" value="${escapeHtml(mediatorStyle.color || '')}">
+                  <label class="form-label">Descrição</label>
+                  <textarea name="description" class="form-control" placeholder="Use {mediators} para listar os mediadores online.">${escapeHtml(mediatorStyle.description || '')}</textarea>
+                   <p style="font-size: 12px; color: var(--text-muted); margin-top: 8px;">Variáveis disponíveis: <code>{mediators}</code></p>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Imagem URL</label>
+                  <input type="text" name="image" class="form-control" placeholder="https://..." value="${escapeHtml(mediatorStyle.image || '')}">
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">Footer</label>
+                  <input type="text" name="footer" class="form-control" placeholder="Texto do rodapé" value="${escapeHtml(mediatorStyle.footer || '')}">
                 </div>
 
                 <button type="submit" class="btn btn-primary">
