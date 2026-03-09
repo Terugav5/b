@@ -1,6 +1,7 @@
 const { Events, EmbedBuilder } = require('discord.js');
 const db = require('../utils/db');
 const { updateMediatorPanel } = require('../utils/panelManager');
+const { buildQueueEmbed } = require('../utils/queuePublisher');
 const path = require('path');
 const fs = require('fs');
 
@@ -275,6 +276,7 @@ async function handleQueueLeave(interaction, dbData) {
 }
 
 async function updateQueueEmbed(interaction, queue) {
+    const dbData = await db.get();
     const channel = await interaction.guild.channels.fetch(queue.channelId);
     if (!channel) return;
 
@@ -288,8 +290,6 @@ async function updateQueueEmbed(interaction, queue) {
     }
 
     if (!message) return;
-
-    const embed = EmbedBuilder.from(message.embeds[0]);
 
     // Format players with their type
     let playersText = 'Nenhum jogador';
@@ -330,9 +330,7 @@ async function updateQueueEmbed(interaction, queue) {
         }
     }
 
-    embed.setDescription(`${queue.mode.toUpperCase()}\n\nTIPO: ${queue.type.toUpperCase()}\n\nPREÇO: R$${queue.value}\n\nJOGADORES\n${playersText}`);
-    embed.setColor('#1E90FF');
-    embed.setThumbnail('https://cdn.discordapp.com/attachments/1442275309721358498/1443310621306388642/4a5d08808a19c5eb00828b2a63cad70d.jpg');
+    const embed = buildQueueEmbed(queue, dbData.embedSettings?.queue, playersText);
 
     await message.edit({ embeds: [embed] });
 }

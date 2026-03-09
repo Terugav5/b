@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
+const { startAdminPanel } = require('./web/server');
 
 const client = new Client({
     intents: Object.values(GatewayIntentBits)
@@ -71,7 +72,10 @@ if (!botToken) {
 
 console.log('Attempting to login to Discord...');
 client.login(botToken)
-    .then(() => console.log('Login successful!'))
+    .then(() => {
+        console.log('Login successful!');
+        startAdminPanel(client);
+    })
     .catch(error => {
         console.error('Failed to login to Discord:');
         if (error.code === 'TokenInvalid') {

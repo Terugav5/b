@@ -1,5 +1,55 @@
-const { EmbedBuilder } = require('discord.js');
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const db = require('./db');
+
+async function ensureMediatorPanelMessage(client, guild) {
+    const dbData = await db.get();
+    const config = dbData.config || {};
+    if (!config.mediatorChannel) {
+        throw new Error('Canal de mediadores não configurado.');
+    }
+
+    const channel = await guild.channels.fetch(config.mediatorChannel);
+    if (!channel) {
+        throw new Error('Canal de mediadores não encontrado.');
+    }
+
+    let panelMessage = null;
+
+    if (config.mediatorMessageId) {
+        panelMessage = await channel.messages.fetch(config.mediatorMessageId).catch(() => null);
+    }
+
+    if (!panelMessage) {
+        const messages = await channel.messages.fetch({ limit: 50 });
+        panelMessage = messages.find((message) =>
+            message.author.id === client.user.id &&
+            message.embeds.length > 0 &&
+            message.embeds[0].title === 'Painel de Mediadores'
+        ) || null;
+    }
+
+    if (!panelMessage) {
+        const embedSettings = dbData.embedSettings?.mediator || {};
+        const embed = new EmbedBuilder()
+            .setTitle(embedSettings.title || 'Painel de Mediadores')
+            .setDescription('Não há mediadores online no momento.')
+            .setColor(embedSettings.color || 'Blue')
+            .setTimestamp();
+
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder().setCustomId('mediator_join').setLabel('Entrar').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('mediator_leave').setLabel('Sair').setStyle(ButtonStyle.Danger)
+            );
+
+        panelMessage = await channel.send({ embeds: [embed], components: [row] });
+    }
+
+    config.mediatorMessageId = panelMessage.id;
+    await db.set('config', config);
+
+    return panelMessage;
+}
 
 async function updateMediatorPanel(client, guild) {
     const dbData = await db.get();
@@ -16,29 +66,7 @@ async function updateMediatorPanel(client, guild) {
             return;
         };
 
-        let panelMessage;
-
-        if (config.mediatorMessageId) {
-            try {
-                panelMessage = await channel.messages.fetch(config.mediatorMessageId);
-            } catch (e) {
-                console.log('Mensagem do painel salva não encontrada, procurando...');
-            }
-        }
-
-        if (!panelMessage) {
-            const messages = await channel.messages.fetch({ limit: 50 });
-            panelMessage = messages.find(m =>
-                m.author.id === client.user.id &&
-                m.embeds.length > 0 &&
-                m.embeds[0].title === 'Painel de Mediadores'
-            );
-        }
-
-        if (!panelMessage) {
-            console.log(`Não foi possível encontrar a mensagem do painel de mediadores no canal ${channel.name}.`);
-            return;
-        }
+        const panelMessage = await ensureMediatorPanelMessage(client, guild);
 
         const onlineMediators = Object.entries(dbData.mediators || {})
             .filter(([_, data]) => data.online)
@@ -48,7 +76,7 @@ async function updateMediatorPanel(client, guild) {
         const embedSettings = dbData.embedSettings?.mediator || {};
 
         const embed = new EmbedBuilder()
-            .setTitle('Painel de Mediadores')
+            .setTitle(embedSettings.title || 'Painel de Mediadores')
             .setDescription(onlineMediators || 'Não há mediadores online no momento.')
             .setColor(embedSettings.color || 'Blue')
             .setTimestamp();
@@ -65,4 +93,4 @@ async function updateMediatorPanel(client, guild) {
     }
 }
 
-module.exports = { updateMediatorPanel };
+module.exports = { ensureMediatorPanelMessage, updateMediatorPanel };
