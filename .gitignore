@@ -1,0 +1,21 @@
+# Environment variables
+.env
+
+# Node modules
+node_modules/
+
+# Database files
+*.db
+
+# Backup files
+*.backup
+
+# JSON específicos (se quiser ignorar)
+database.json
+database.json.backup
+
+# Logs
+*.log
+
+# VSCode local settings (opcional)
+.vscode/
