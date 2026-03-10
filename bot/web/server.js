@@ -2,254 +2,256 @@ const express = require('express');
 const session = require('express-session');
 const db = require('../utils/db');
 const {
-    publishQueues,
-    deleteQueueById,
-    deleteAllQueues
+  publishQueues,
+  deleteQueueById,
+  deleteAllQueues
 } = require('../utils/queuePublisher');
 const { ensureMediatorPanelMessage, updateMediatorPanel } = require('../utils/panelManager');
 const { guildId: configuredGuildId } = require('../config.json');
 
 function startAdminPanel(client) {
-    const app = express();
-    const host = process.env.ADMIN_PANEL_HOST || '127.0.0.1';
-    const port = Number(process.env.ADMIN_PANEL_PORT || 3000);
-    const password = process.env.ADMIN_PANEL_PASSWORD || 'admin';
-    const sessionSecret = process.env.ADMIN_PANEL_SESSION_SECRET || 'change-this-session-secret';
+  const app = express();
+  const host = process.env.ADMIN_PANEL_HOST || '127.0.0.1';
+  const port = Number(process.env.ADMIN_PANEL_PORT || 3000);
+  const password = process.env.ADMIN_PANEL_PASSWORD || 'admin';
+  const sessionSecret = process.env.ADMIN_PANEL_SESSION_SECRET || 'change-this-session-secret';
 
-    app.use(express.urlencoded({ extended: false }));
-    app.use(express.json());
-    app.use(session({
-        secret: sessionSecret,
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-            httpOnly: true,
-            sameSite: 'lax'
-        }
-    }));
+  app.use(express.urlencoded({ extended: false }));
+  app.use(express.json());
+  app.use(express.static('web/public'));
+  app.use(session({
+    secret: sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      sameSite: 'lax'
+    }
+  }));
 
-    app.get('/', (req, res) => {
-        if (req.session.authenticated) {
-            return res.redirect('/admin');
-        }
-        return res.send(renderLogin());
-    });
+  app.get('/', (req, res) => {
+    if (req.session.authenticated) {
+      return res.redirect('/admin');
+    }
+    return res.send(renderLogin());
+  });
 
-    app.post('/login', (req, res) => {
-        if ((req.body.password || '') !== password) {
-            return res.status(401).send(renderLogin('Senha incorreta.'));
-        }
+  app.post('/login', (req, res) => {
+    if ((req.body.password || '') !== password) {
+      return res.status(401).send(renderLogin('Senha incorreta.'));
+    }
 
-        req.session.authenticated = true;
-        return res.redirect('/admin');
-    });
+    req.session.authenticated = true;
+    return res.redirect('/admin');
+  });
 
-    app.post('/logout', (req, res) => {
-        req.session.destroy(() => res.redirect('/'));
-    });
+  app.post('/logout', (req, res) => {
+    req.session.destroy(() => res.redirect('/'));
+  });
 
-    app.use('/admin', (req, res, next) => {
-        if (!req.session.authenticated) {
-            if (wantsJson(req)) {
-                return res.status(401).json({ ok: false, error: 'Não autenticado.' });
-            }
-            return res.redirect('/');
-        }
-        return next();
-    });
+  app.use('/admin', (req, res, next) => {
+    if (!req.session.authenticated) {
+      if (wantsJson(req)) {
+        return res.status(401).json({ ok: false, error: 'Não autenticado.' });
+      }
+      return res.redirect('/');
+    }
+    return next();
+  });
 
-    app.get('/admin', async (req, res) => {
-        try {
-            const guild = await getGuild(client);
-            const data = await db.get();
-            res.send(renderDashboard({
-                guild,
-                config: data.config || {},
-                embedSettings: data.embedSettings || {},
-                queues: data.queues || [],
-                mediators: data.mediators || {},
-                status: req.query.status || ''
-            }));
-        } catch (error) {
-            res.status(500).send(renderError(error));
-        }
-    });
+  app.get('/admin', async (req, res) => {
+    try {
+      const guild = await getGuild(client);
+      const data = await db.get();
+      res.send(renderDashboard({
+        guild,
+        config: data.config || {},
+        embedSettings: data.embedSettings || {},
+        queues: data.queues || [],
+        mediators: data.mediators || {},
+        status: req.query.status || ''
+      }));
+    } catch (error) {
+      res.status(500).send(renderError(error));
+    }
+  });
 
-    app.post('/admin/mediators', async (req, res) => {
-        try {
-            const config = await db.get('config') || {};
-            config.mediatorRole = req.body.mediatorRole;
-            config.mediatorChannel = req.body.mediatorChannel;
-            await db.set('config', config);
+  app.post('/admin/mediators', async (req, res) => {
+    try {
+      const config = await db.get('config') || {};
+      config.mediatorRole = req.body.mediatorRole;
+      config.mediatorChannel = req.body.mediatorChannel;
+      await db.set('config', config);
 
-            const guild = await getGuild(client);
-            await ensureMediatorPanelMessage(client, guild);
-            await updateMediatorPanel(client, guild);
+      const guild = await getGuild(client);
+      await ensureMediatorPanelMessage(client, guild);
+      await updateMediatorPanel(client, guild);
 
-            return sendSuccess(req, res, 'Painel de mediadores configurado.');
-        } catch (error) {
-            return sendFailure(req, res, error);
-        }
-    });
+      return sendSuccess(req, res, 'Painel de mediadores configurado.');
+    } catch (error) {
+      return sendFailure(req, res, error);
+    }
+  });
 
-    app.post('/admin/queues', async (req, res) => {
-        try {
-            const mode = req.body.mode;
-            const type = req.body.type;
-            const channelId = req.body.channelId;
-            const values = String(req.body.values || '')
-                .split(',')
-                .map((value) => value.trim())
-                .filter(Boolean);
+  app.post('/admin/queues', async (req, res) => {
+    try {
+      const mode = req.body.mode;
+      const type = req.body.type;
+      const channelId = req.body.channelId;
+      const values = String(req.body.values || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
 
-            const queues = await db.get('queues') || [];
-            for (const value of values) {
-                queues.push({
-                    id: `${mode}-${type}-${value}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-                    mode,
-                    type,
-                    value,
-                    channelId,
-                    players: [],
-                    messageId: ''
-                });
-            }
+      const queues = await db.get('queues') || [];
+      for (const value of values) {
+        queues.push({
+          id: `${mode}-${type}-${value}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          mode,
+          type,
+          value,
+          channelId,
+          players: [],
+          messageId: ''
+        });
+      }
 
-            await db.set('queues', queues);
-            return sendSuccess(req, res, `Fila(s) adicionada(s): ${values.length}.`);
-        } catch (error) {
-            return sendFailure(req, res, error);
-        }
-    });
+      await db.set('queues', queues);
+      return sendSuccess(req, res, `Fila(s) adicionada(s): ${values.length}.`);
+    } catch (error) {
+      return sendFailure(req, res, error);
+    }
+  });
 
-    app.post('/admin/embed-settings/queue', async (req, res) => {
-        try {
-            const embedSettings = await db.get('embedSettings') || {};
-            embedSettings.queue = {
-                color: req.body.color || '',
-                title: req.body.title || '',
-                description: req.body.description || '',
-                thumbnail: req.body.thumbnail || '',
-                image: req.body.image || '',
-                footer: req.body.footer || ''
-            };
+  app.post('/admin/embed-settings/queue', async (req, res) => {
+    try {
+      const embedSettings = await db.get('embedSettings') || {};
+      embedSettings.queue = {
+        color: req.body.color || '',
+        title: req.body.title || '',
+        description: req.body.description || '',
+        thumbnail: req.body.thumbnail || '',
+        image: req.body.image || '',
+        footer: req.body.footer || ''
+      };
 
-            await db.set('embedSettings', embedSettings);
-            return sendSuccess(req, res, 'Estilo da embed das filas salvo.');
-        } catch (error) {
-            return sendFailure(req, res, error);
-        }
-    });
+      await db.set('embedSettings', embedSettings);
+      return sendSuccess(req, res, 'Estilo da embed das filas salvo.');
+    } catch (error) {
+      return sendFailure(req, res, error);
+    }
+  });
 
-    app.post('/admin/embed-settings/mediator', async (req, res) => {
-        try {
-            const embedSettings = await db.get('embedSettings') || {};
-            embedSettings.mediator = {
-                ...(embedSettings.mediator || {}),
-                color: req.body.color || '',
-                title: req.body.title || '',
-                description: req.body.description || '',
-                image: req.body.image || '',
-                footer: req.body.footer || ''
-            };
+  app.post('/admin/embed-settings/mediator', async (req, res) => {
+    try {
+      const embedSettings = await db.get('embedSettings') || {};
+      embedSettings.mediator = {
+        ...(embedSettings.mediator || {}),
+        color: req.body.color || '',
+        title: req.body.title || '',
+        description: req.body.description || '',
+        image: req.body.image || '',
+        footer: req.body.footer || ''
+      };
 
-            await db.set('embedSettings', embedSettings);
+      await db.set('embedSettings', embedSettings);
 
-            const guild = await getGuild(client);
-            await updateMediatorPanel(client, guild);
+      const guild = await getGuild(client);
+      await updateMediatorPanel(client, guild);
 
-            return sendSuccess(req, res, 'Aparência do painel de mediadores salva.');
-        } catch (error) {
-            return sendFailure(req, res, error);
-        }
-    });
+      return sendSuccess(req, res, 'Aparência do painel de mediadores salva.');
+    } catch (error) {
+      return sendFailure(req, res, error);
+    }
+  });
 
-    app.post('/admin/queues/delete', async (req, res) => {
-        try {
-            const result = await deleteQueueById(client, req.body.queueId);
-            return sendSuccess(req, res, `Fila removida. Mensagens apagadas no Discord: ${result.deletedMessages}.`);
-        } catch (error) {
-            return sendFailure(req, res, error);
-        }
-    });
+  app.post('/admin/queues/delete', async (req, res) => {
+    try {
+      const result = await deleteQueueById(client, req.body.queueId);
+      return sendSuccess(req, res, `Fila removida. Mensagens apagadas no Discord: ${result.deletedMessages}.`);
+    } catch (error) {
+      return sendFailure(req, res, error);
+    }
+  });
 
-    app.post('/admin/queues/delete-all', async (req, res) => {
-        try {
-            const result = await deleteAllQueues(client);
-            return sendSuccess(req, res, `Todas as filas foram removidas. Filas: ${result.removed}. Mensagens apagadas: ${result.deletedMessages}.`);
-        } catch (error) {
-            return sendFailure(req, res, error);
-        }
-    });
+  app.post('/admin/queues/delete-all', async (req, res) => {
+    try {
+      const result = await deleteAllQueues(client);
+      return sendSuccess(req, res, `Todas as filas foram removidas. Filas: ${result.removed}. Mensagens apagadas: ${result.deletedMessages}.`);
+    } catch (error) {
+      return sendFailure(req, res, error);
+    }
+  });
 
-    app.post('/admin/queues/publish', async (req, res) => {
-        try {
-            const guild = await getGuild(client);
-            const result = await publishQueues(client, guild.id);
-            return sendSuccess(req, res, `Filas publicadas: ${result.count}.`);
-        } catch (error) {
-            return sendFailure(req, res, error);
-        }
-    });
+  app.post('/admin/queues/publish', async (req, res) => {
+    try {
+      const guild = await getGuild(client);
+      const result = await publishQueues(client, guild.id);
+      return sendSuccess(req, res, `Filas publicadas: ${result.count}.`);
+    } catch (error) {
+      return sendFailure(req, res, error);
+    }
+  });
 
-    const server = app.listen(port, host, () => {
-        console.log(`Admin panel running at http://${host}:${port}`);
-        if (!process.env.ADMIN_PANEL_PASSWORD) {
-            console.log('ADMIN_PANEL_PASSWORD não definido. Usando senha padrão insegura: admin');
-        }
-    });
+  const server = app.listen(port, host, () => {
+    console.log(`Admin panel running at http://${host}:${port}`);
+    if (!process.env.ADMIN_PANEL_PASSWORD) {
+      console.log('ADMIN_PANEL_PASSWORD não definido. Usando senha padrão insegura: admin');
+    }
+  });
 
-    return server;
+  return server;
 }
 
 async function getGuild(client) {
-    const guildId = process.env.GUILD_ID || configuredGuildId;
-    const guild = guildId
-        ? await client.guilds.fetch(guildId)
-        : client.guilds.cache.first();
+  const guildId = process.env.GUILD_ID || configuredGuildId;
+  const guild = guildId
+    ? await client.guilds.fetch(guildId)
+    : client.guilds.cache.first();
 
-    if (!guild) {
-        throw new Error('Nenhum servidor do Discord disponível para o painel.');
-    }
+  if (!guild) {
+    throw new Error('Nenhum servidor do Discord disponível para o painel.');
+  }
 
-    await guild.channels.fetch();
-    await guild.roles.fetch();
-    return guild;
+  await guild.channels.fetch();
+  await guild.roles.fetch();
+  return guild;
 }
 
 function wantsJson(req) {
-    return req.get('x-requested-with') === 'fetch' || req.accepts(['html', 'json']) === 'json';
+  return req.get('x-requested-with') === 'fetch' || req.accepts(['html', 'json']) === 'json';
 }
 
 function sendSuccess(req, res, message) {
-    if (wantsJson(req)) {
-        return res.json({ ok: true, message });
-    }
+  if (wantsJson(req)) {
+    return res.json({ ok: true, message });
+  }
 
-    return res.redirect(`/admin?status=${encodeURIComponent(message)}`);
+  return res.redirect(`/admin?status=${encodeURIComponent(message)}`);
 }
 
 function sendFailure(req, res, error) {
-    if (wantsJson(req)) {
-        return res.status(500).json({ ok: false, error: error.message || String(error) });
-    }
+  if (wantsJson(req)) {
+    return res.status(500).json({ ok: false, error: error.message || String(error) });
+  }
 
-    return res.status(500).send(renderError(error));
+  return res.status(500).send(renderError(error));
 }
 
 function renderLogin(errorMessage = '') {
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login | Painel Admin</title>
+  <link rel="icon" href="/icon.jpg">
   <style>
     :root {
-      --bg: #0d0d0d;
-      --surface: #1c1c1c;
-      --surface-hover: #3a3a3a;
-      --border: #3a3a3a;
+      --bg: #1a1a2a;
+      --surface: #2a2a3a;
+      --surface-hover: #3a3a4a;
+      --border: #3a3a4a;
       --text: #ffffff;
       --text-muted: #808080;
       --accent: #e50914;
@@ -273,8 +275,8 @@ function renderLogin(errorMessage = '') {
       color: var(--text);
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
       background-image: 
-        radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+        radial-gradient(circle at 20% 50%, rgba(229, 9, 20, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 80% 80%, rgba(244, 6, 18, 0.05) 0%, transparent 50%);
     }
     
     .login-container {
@@ -300,19 +302,7 @@ function renderLogin(errorMessage = '') {
       left: 0;
       right: 0;
       height: 2px;
-      background: linear-gradient(90deg, var(--accent), #8b5cf6, var(--accent));
-    }
-    
-    .logo {
-      width: 64px;
-      height: 64px;
-      background: linear-gradient(135deg, var(--accent), #8b5cf6);
-      border-radius: 16px;
-      display: grid;
-      place-items: center;
-      margin-bottom: 32px;
-      font-size: 28px;
-      font-weight: 700;
+      background: linear-gradient(90deg, var(--accent), var(--accent-hover), var(--accent));
     }
     
     h1 {
@@ -406,7 +396,6 @@ function renderLogin(errorMessage = '') {
   <div class="login-container">
     <div class="login-card">
       <div class="logo">
-      <img src="https://lh3.googleusercontent.com/rd-gg-dl/AOI_d_9zDC6A-1yjRNx-nmwDNTBfpteTcTS145Dp5E8JJt6OoWFNM1UyzVqhly5OhYphvk7ni3g-QrJLqFILb_LtH5MI6cdvqRBK_893hVYKf5wC_tTaKzrLwIbG6N0Obs-g8BojDYoIGOvTo8EId5QcDuw2hhBXO88p8aWtpN3dhYWckQkopwvICiP5Qg73eeLa2CJ4leMFQc3DSceKNCozoP4Fw6kmgdsvl_iu1rxLTxWBVGqKBPP8SxrEqt_Rq-VxRnBsxkb-L9G8AEGFr6NrJfZBXP99qTlDyr7MZ-161GEcbGXW4r1jtANXZJuBUFDBzNlhtv1_0OMQ7K0fHQv5D4tkB8gIGFooGSWWGpwKzv4dGrjLr6ivZs2litkh7SiVTIdr8GG5caWzuLojXd0zCkbiI_O0E3_kk8ZnPwsnPiHPJmXMsaq4D744Pf3w3dokiwUe3uIoUvArK_GSer8MrfTjBvTXEQYRCFhbPyT65lzIw3OMald9bh8d-f8P8ZN_4Jj9_w6yzSV5W2sx0P87FsEHue4apCa--enpptbRQISTMeWpuDqPxyiDD8YZDTWWQGQ6PLRGFvViBYW6rM-6ZRZktjYC6q08UF-VKN5RIpDdAYDc2WGDS6SvYZqXQ-sZxH-7dtwBlhtF9NULinETPGC5PlbGN24M4lSh1T4nbYZk61jylR79ScTUqQHcOR2AmhZ242h81L_9md3Ti7_-dWvCOPEFeNl_eS3p57nK9DE0NgenQCxt8KzAf16b7Ge_9gBrkhELn22I8FTJufAp1GOMmdlnli4RlDO-e9mBy0WKeLXWNKO6CWBCPzQz-WpqOy2UDRFqR1OEnirsQRBqwYB8cQkwAzw6e2EzCdc-uhrap1fD-JPSnOEdDtI66LYv5zx3My4UNi8yiLb7nuL9VUvmCSNLceeaBP1EPa6aReY4N84zIKV3BUQni-rs9RTZ6lfC2Wa4RLWG0mWqpi49jskuDV7s8i3j4R5jXCronsa6cEY3mEFDm2n8Qc4NKHw2qvz6b6Z8dbNJ2IkGfmANOW0r3tbNReai8ORMXXEbltBFqJbPKYbxIPCDGD3NsgzxQfQEnHP64dz7tri-irJzHe10eZJLx2H8Zqy7sjkHtiMvMm8yAuArJystH8YifFxo4R5PrXkZsX3yH3VVFp2sPXtAWX9TBhNOLVXRnc7L3J2INOMv8JVMrq6RV4uTDEDcG6Qf6XJv9xip_ofTNPdSB2xLiUYIHKY9D_57jbRBmmDLbRuZ5ZoRSxaeTw=s1024-rj">
       </div>
       <h1>Bem-vindo de volta</h1>
       <p class="subtitle">Painel de administração do bot</p>
@@ -432,15 +421,15 @@ function renderLogin(errorMessage = '') {
 }
 
 function renderDashboard({ guild, config, embedSettings, queues, mediators, status }) {
-    const textChannels = guild.channels.cache
-        .filter((channel) => channel && typeof channel.isTextBased === 'function' && channel.isTextBased() && channel.type === 0)
-        .sort((a, b) => a.position - b.position);
-    const roles = guild.roles.cache
-        .filter((role) => role.name !== '@everyone')
-        .sort((a, b) => b.position - a.position);
+  const textChannels = guild.channels.cache
+    .filter((channel) => channel && typeof channel.isTextBased === 'function' && channel.isTextBased() && channel.type === 0)
+    .sort((a, b) => a.position - b.position);
+  const roles = guild.roles.cache
+    .filter((role) => role.name !== '@everyone')
+    .sort((a, b) => b.position - a.position);
 
-    const mediatorRows = Object.entries(mediators)
-        .map(([userId, data]) => `
+  const mediatorRows = Object.entries(mediators)
+    .map(([userId, data]) => `
           <tr>
             <td>
               <div class="user-cell">
@@ -457,8 +446,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
           </tr>
         `).join('');
 
-    const queueRows = queues
-        .map((queue) => `
+  const queueRows = queues
+    .map((queue) => `
           <tr id="queue-row-${escapeHtml(queue.id)}">
             <td><span class="mode-badge mode-${queue.mode}">${escapeHtml(queue.mode)}</span></td>
             <td><span class="type-badge">${escapeHtml(queue.type)}</span></td>
@@ -480,31 +469,32 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
           </tr>
         `).join('');
 
-    const queueStyle = embedSettings.queue || {};
-    const mediatorStyle = embedSettings.mediator || {};
+  const queueStyle = embedSettings.queue || {};
+  const mediatorStyle = embedSettings.mediator || {};
 
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard | Painel Admin</title>
+  <link rel="icon" href="/icon.jpg">
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
     :root {
-      --bg: #0a0a0f;
-      --surface: #12121a;
+      --bg: #1a1a2a;
+      --surface: #2a2a3a;
       --surface-elevated: #1a1a25;
-      --surface-hover: #222230;
-      --border: #2a2a3a;
-      --border-strong: #3a3a4a;
+      --surface-hover: #3a3a4a;
+      --border: #3a3a4a;
+      --border-strong: #4a4a5a;
       --text: #ffffff;
       --text-secondary: #a1a1aa;
       --text-muted: #71717a;
-      --accent: #6366f1;
-      --accent-hover: #4f46e5;
-      --accent-light: rgba(99, 102, 241, 0.1);
+      --accent: #e50914;
+      --accent-hover: #f40612;
+      --accent-light: rgba(229, 9, 20, 0.1);
       --success: #22c55e;
       --success-light: rgba(34, 197, 94, 0.1);
       --warning: #f59e0b;
@@ -532,8 +522,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
       line-height: 1.5;
       min-height: 100vh;
       background-image: 
-        radial-gradient(circle at 0% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-        radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+        radial-gradient(circle at 0% 0%, rgba(229, 9, 20, 0.08) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(244, 6, 18, 0.05) 0%, transparent 50%);
     }
     
     /* Layout */
@@ -568,7 +558,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
     .brand-icon {
       width: 40px;
       height: 40px;
-      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
       border-radius: var(--radius);
       display: grid;
       place-items: center;
@@ -745,7 +735,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
       left: 0;
       right: 0;
       height: 2px;
-      background: linear-gradient(90deg, var(--accent), #8b5cf6);
+      background: linear-gradient(90deg, var(--accent), var(--accent-hover));
       opacity: 0.5;
     }
     
@@ -1092,7 +1082,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
     .avatar {
       width: 32px;
       height: 32px;
-      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      background: linear-gradient(135deg, var(--accent), var(--accent-hover));
       border-radius: 50%;
       display: grid;
       place-items: center;
@@ -1306,7 +1296,6 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-icon">⚡</div>
         <div class="brand-text">
           <h1>Bot Admin</h1>
           <span>Painel de Controle</span>
@@ -1961,7 +1950,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
 }
 
 function renderError(error) {
-    return `<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -2029,12 +2018,12 @@ function renderError(error) {
 }
 
 function escapeHtml(value) {
-    return String(value)
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#39;');
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 module.exports = { startAdminPanel };
