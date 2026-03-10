@@ -162,6 +162,7 @@ function buildQueueButtons(queue) {
         } else {
             row.addComponents(
                 new ButtonBuilder().setCustomId(`join_${queue.id}_entrar`).setLabel('Entrar').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`join_${queue.id}_umpxm8`).setLabel('FULL UMP / XM8').setStyle(ButtonStyle.Primary),
                 new ButtonBuilder().setCustomId(`leave_${queue.id}`).setLabel('Sair').setStyle(ButtonStyle.Danger)
             );
         }

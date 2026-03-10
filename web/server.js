@@ -150,7 +150,7 @@ function startAdminPanel(client) {
         color: req.body.color || '',
         title: req.body.title || '',
         description: req.body.description || '',
-        image: req.body.image || '',
+        thumbnail: req.body.thumbnail || '',
         footer: req.body.footer || ''
       };
 
@@ -1406,7 +1406,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
           <div class="stat-header">
             <div class="stat-icon" style="background: rgba(245, 158, 11, 0.1); color: var(--warning);">💰</div>
           </div>
-          <div class="stat-value">${queues.reduce((acc, q) => acc + (Number(q.value) * q.players.length), 0)}</div>
+          <div class="stat-value" id="stat-volume">${queues.reduce((acc, q) => acc + (Number(q.value) * q.players.length), 0)}</div>
           <div class="stat-label">Volume em jogo (R$)</div>
         </div>
       </div>
@@ -1435,7 +1435,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
                 </thead>
                 <tbody>
                   ${queues.slice(0, 5).map(queue => `
-                    <tr>
+                    <tr id="queue-row-dash-${escapeHtml(queue.id)}">
                       <td><span class="mode-badge mode-${queue.mode}">${escapeHtml(queue.mode)}</span></td>
                       <td><span class="type-badge">${escapeHtml(queue.type)}</span></td>
                       <td class="mono highlight">R$ ${escapeHtml(queue.value)}</td>
@@ -1505,7 +1505,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
                 
                 <div class="danger-zone">
                   <div class="danger-title">Zona de Perigo</div>
-                  <button class="btn btn-danger" style="width: 100%;" onclick="if(confirm('Tem certeza?')) document.querySelector('[data-endpoint=\\'/admin/queues/delete-all\\']').click()">
+                  <button class="btn btn-danger ajax-button" style="width: 100%;" data-endpoint="/admin/queues/delete-all" data-confirm="Tem certeza que deseja deletar TODAS as filas do Discord e do sistema?">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <polyline points="3,6 5,6 21,6"/>
                       <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
@@ -1590,7 +1590,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
                 
                 <div class="form-group">
                   <label class="form-label">Canal</label>
-                  <select name="channelId" class="form-control" required>
+                  <input type="text" class="form-control select-search" placeholder="🔍 Pesquisar canal..." data-target="channelId" style="margin-bottom: 8px; height: 32px; font-size: 13px;">
+                  <select name="channelId" id="channelId" class="form-control" required>
                     <option value="">Selecione...</option>
                     ${textChannels.map((channel) => `<option value="${channel.id}">#${escapeHtml(channel.name)}</option>`).join('')}
                   </select>
@@ -1656,7 +1657,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
               <form class="ajax-form" method="post" action="/admin/mediators">
                 <div class="form-group">
                   <label class="form-label">Cargo de Mediador</label>
-                  <select name="mediatorRole" class="form-control" required>
+                  <input type="text" class="form-control select-search" placeholder="🔍 Pesquisar cargo..." data-target="mediatorRole" style="margin-bottom: 8px; height: 32px; font-size: 13px;">
+                  <select name="mediatorRole" id="mediatorRole" class="form-control" required>
                     <option value="">Selecione...</option>
                     ${roles.map((role) => `<option value="${role.id}" ${config.mediatorRole === role.id ? 'selected' : ''}>${escapeHtml(role.name)}</option>`).join('')}
                   </select>
@@ -1664,7 +1666,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
                 
                 <div class="form-group">
                   <label class="form-label">Canal do Painel</label>
-                  <select name="mediatorChannel" class="form-control" required>
+                  <input type="text" class="form-control select-search" placeholder="🔍 Pesquisar canal..." data-target="mediatorChannel" style="margin-bottom: 8px; height: 32px; font-size: 13px;">
+                  <select name="mediatorChannel" id="mediatorChannel" class="form-control" required>
                     <option value="">Selecione...</option>
                     ${textChannels.map((channel) => `<option value="${channel.id}" ${config.mediatorChannel === channel.id ? 'selected' : ''}>#${escapeHtml(channel.name)}</option>`).join('')}
                   </select>
@@ -1758,8 +1761,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label">Imagem URL</label>
-                  <input type="text" name="image" class="form-control" placeholder="https://..." value="${escapeHtml(mediatorStyle.image || '')}">
+                  <label class="form-label">Thumbnail URL</label>
+                  <input type="text" name="thumbnail" class="form-control" placeholder="https://..." value="${escapeHtml(mediatorStyle.thumbnail || '')}">
                 </div>
 
                 <div class="form-group">
@@ -1889,17 +1892,26 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
           showAlert(payload.message, false);
 
           if (button.dataset.queueId) {
-            const row = document.getElementById('queue-row-' + CSS.escape(button.dataset.queueId));
-            if (row) {
-              row.style.opacity = '0';
+              const row = document.getElementById('queue-row-' + CSS.escape(button.dataset.queueId));
+              if (row) {
+                row.style.opacity = '0';
+                setTimeout(() => row.remove(), 300);
+              }
+              const rowDash = document.getElementById('queue-row-dash-' + CSS.escape(button.dataset.queueId));
+              if (rowDash) {
+                rowDash.style.opacity = '0';
+                setTimeout(() => rowDash.remove(), 300);
+              }
               setTimeout(() => {
-                row.remove();
                 syncEmptyState();
                 updateStats();
               }, 300);
-            }
           } else if (button.dataset.endpoint.endsWith('/delete-all')) {
             document.querySelectorAll('tr[id^="queue-row-"]').forEach(row => {
+              row.style.opacity = '0';
+              setTimeout(() => row.remove(), 300);
+            });
+            document.querySelectorAll('tr[id^="queue-row-dash-"]').forEach(row => {
               row.style.opacity = '0';
               setTimeout(() => row.remove(), 300);
             });
@@ -1918,25 +1930,41 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
     });
 
     function syncEmptyState() {
-      const tbody = document.getElementById('queues-table-body');
-      const rows = tbody.querySelectorAll('tr[id^="queue-row-"]');
-      if (rows.length === 0 && !document.getElementById('empty-queues')) {
-        tbody.innerHTML = \`
-          <tr id="empty-queues">
-            <td colspan="6">
-              <div class="empty-state">
-                <div class="empty-state-icon">📭</div>
-                <p>Nenhuma fila cadastrada ainda</p>
-              </div>
-            </td>
-          </tr>
-        \`;
-      }
+      const tbodies = [
+        document.getElementById('queues-table-body'),
+        document.getElementById('dashboard-queues-table-body')
+      ];
+      
+      tbodies.forEach(tbody => {
+        if (!tbody) return;
+        const rows = tbody.querySelectorAll('tr[id^="queue-row-"]');
+        const isEmpty = tbody.querySelector('.empty-state');
+        
+        if (rows.length === 0 && !isEmpty) {
+          const cols = tbody.id === 'dashboard-queues-table-body' ? 5 : 6;
+          tbody.innerHTML = \`
+            <tr class="empty-row">
+              <td colspan="\${cols}">
+                <div class="empty-state">
+                  <div class="empty-state-icon">📭</div>
+                  <p>Nenhuma fila cadastrada ainda</p>
+                </div>
+              </td>
+            </tr>
+          \`;
+        }
+      });
     }
 
     function updateStats() {
-      const count = document.querySelectorAll('tr[id^="queue-row-"]').length;
-      document.getElementById('stat-queues').textContent = count;
+      const count = document.querySelectorAll('#queues-table-body tr[id^="queue-row-"]').length;
+      const statQueues = document.getElementById('stat-queues');
+      if (statQueues) statQueues.textContent = count;
+      
+      const statVolume = document.getElementById('stat-volume');
+      if (statVolume) {
+        if (count === 0) statVolume.textContent = '0';
+      }
     }
 
     // Initial status message
@@ -1944,6 +1972,32 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
     if (statusMessage) {
       showAlert(statusMessage, false);
     }
+
+    // Select search functionality
+    document.querySelectorAll('.select-search').forEach(input => {
+      input.addEventListener('input', (e) => {
+        const searchTerm = e.target.value.toLowerCase();
+        const targetId = e.target.dataset.target;
+        const select = document.getElementById(targetId);
+        
+        if (!select) return;
+
+        const options = select.options;
+        for (let i = 0; i < options.length; i++) {
+          const option = options[i];
+          if (!option.value) continue; // Skip placeholder
+
+          const text = option.textContent.toLowerCase();
+          const matches = text.includes(searchTerm);
+          
+          if (matches) {
+            option.style.display = 'block';
+          } else {
+            option.style.display = 'none';
+          }
+        }
+      });
+    });
   </script>
 </body>
 </html>`;

@@ -255,6 +255,9 @@ async function handleQueueJoin(interaction, dbData) {
     } else if (queue.type === '1v1' && (queue.mode === 'mobile' || queue.mode === 'emulador')) {
         if (playerType === 'geloinfinito') typeLabel = 'Gelo Infinito';
         else if (playerType === 'gelonormal') typeLabel = 'Gelo Normal';
+    } else if ((queue.type === '2v2' || queue.type === '3v3' || queue.type === '4v4') && (queue.mode === 'mobile' || queue.mode === 'emulador')) {
+        if (playerType === 'umpxm8') typeLabel = 'FULL UMP / XM8';
+        else if (playerType === 'entrar') typeLabel = 'Normal';
     }
 
     if (typeLabel) {
@@ -308,6 +311,13 @@ async function updateQueueEmbed(interaction, queue) {
             playersText = queue.players.map(p => {
                 const typeLabel = p.type === 'geloinfinito' ? 'Gelo Infinito' : 'Gelo Normal';
                 return `<@${p.id}> | ${typeLabel}`;
+            }).join('\n');
+        }
+        // Mobile/Emulador 2v2/3v3/4v4: show weapon type
+        else if ((queue.type === '2v2' || queue.type === '3v3' || queue.type === '4v4') && (queue.mode === 'mobile' || queue.mode === 'emulador')) {
+            playersText = queue.players.map(p => {
+                const typeLabel = p.type === 'umpxm8' ? 'FULL UMP / XM8' : (p.type === 'entrar' ? 'Normal' : '');
+                return `<@${p.id}>${typeLabel ? ` | ${typeLabel}` : ''}`;
             }).join('\n');
         }
         // Misto 2v2: show emu count
@@ -367,6 +377,22 @@ async function checkMatch(interaction, queue, dbData) {
                 queue.players = queue.players.filter(p => !players.some(pl => pl.id === p.id));
             } else {
                 return; // Not enough players with same ice type
+            }
+        }
+        // Mobile/Emulador 2v2/3v3/4v4: match players with same weapon type
+        else if ((queue.type === '2v2' || queue.type === '3v3' || queue.type === '4v4') && (queue.mode === 'mobile' || queue.mode === 'emulador')) {
+            const requiredCount = (queue.type === '2v2' ? 4 : (queue.type === '3v3' ? 6 : 8));
+            const entrarCount = queue.players.filter(p => p.type === 'entrar');
+            const umpxm8Count = queue.players.filter(p => p.type === 'umpxm8');
+
+            if (entrarCount.length >= requiredCount) {
+                players = entrarCount.splice(0, requiredCount);
+                queue.players = queue.players.filter(p => !players.some(pl => pl.id === p.id));
+            } else if (umpxm8Count.length >= requiredCount) {
+                players = umpxm8Count.splice(0, requiredCount);
+                queue.players = queue.players.filter(p => !players.some(pl => pl.id === p.id));
+            } else {
+                return; // Not enough players with same rule type
             }
         }
         // Misto 2v2: all players are 1 emu
@@ -441,7 +467,11 @@ async function checkMatch(interaction, queue, dbData) {
         });
 
         const gifPath = path.join(__dirname, '..', 'test.gif');
-        const attachment = new AttachmentBuilder(gifPath, { name: 'test.gif' });
+        const fs = require('fs');
+        let attachment = null;
+        if (fs.existsSync(gifPath)) {
+            attachment = new AttachmentBuilder(gifPath, { name: 'test.gif' });
+        }
 
         const embedSettings = dbData.embedSettings?.match || {};
 
@@ -452,7 +482,7 @@ async function checkMatch(interaction, queue, dbData) {
 
         if (embedSettings.image) {
             embed.setImage(embedSettings.image);
-        } else {
+        } else if (attachment) {
             embed.setImage('attachment://test.gif');
         }
 
@@ -466,10 +496,15 @@ async function checkMatch(interaction, queue, dbData) {
                 new ButtonBuilder().setCustomId('match_close_channel').setLabel('Encerrar').setStyle(ButtonStyle.Danger)
             );
 
-        await channel.send({ content: `${players.map(p => `<@${p.id}>`).join(' ')} <@${mediatorId}>`, embeds: [embed], components: [row], files: [attachment] });
+        const msgPayload = { content: `${players.map(p => `<@${p.id}>`).join(' ')} <@${mediatorId}>`, embeds: [embed], components: [row] };
+        if (attachment) {
+            msgPayload.files = [attachment];
+        }
+        await channel.send(msgPayload);
 
         const activeMatches = await db.get('activeMatches') || [];
         activeMatches.push({
+            id: channel.id,
             channelId: channel.id,
             mediatorId: mediatorId,
             players: players.map(p => p.id),

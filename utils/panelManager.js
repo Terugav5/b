@@ -89,8 +89,8 @@ async function updateMediatorPanel(client, guild) {
             .setTimestamp();
 
         if (embedSettings.footer) embed.setFooter({ text: embedSettings.footer });
-        if (embedSettings.image && embedSettings.image.startsWith('http')) {
-            embed.setImage(embedSettings.image);
+        if (embedSettings.thumbnail && embedSettings.thumbnail.startsWith('http')) {
+            embed.setThumbnail(embedSettings.thumbnail);
         }
 
         await panelMessage.edit({ embeds: [embed] });
