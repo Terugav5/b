@@ -971,30 +971,10 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
       border-color: var(--danger);
       color: var(--danger);
     }
-    
-    /* Tables */
-    .table-container {
-      overflow-x: auto;
+
+    .mobile-menu-btn {
+      display: none;
     }
-    
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 14px;
-    }
-    
-    th {
-      text-align: left;
-      padding: 12px 16px;
-      color: var(--text-muted);
-      font-weight: 600;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      border-bottom: 1px solid var(--border);
-      white-space: nowrap;
-    }
-    
     td {
       padding: 16px;
       border-bottom: 1px solid var(--border);
@@ -1205,11 +1185,71 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
       }
       
       .sidebar {
+        display: block;
+        position: fixed;
+        top: 0;
+        left: -320px;
+        width: 280px;
+        height: 100vh;
+        z-index: 1000;
+        transition: left 0.2s ease;
+        padding: 24px;
+        overflow-y: auto;
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+      }
+
+      .sidebar.open {
+        left: 0;
+      }
+
+      .mobile-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 900;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+
+      .mobile-backdrop.visible {
+        display: block;
+        opacity: 1;
+      }
+
+      .main {
+        padding: 20px 16px 40px;
+      }
+
+      .header {
+        position: sticky;
+        top: 0;
+        background: var(--bg);
+        padding-top: 12px;
+        padding-bottom: 12px;
+        z-index: 800;
+      }
+
+      .header-actions {
         display: none;
       }
-      
-      .main {
-        padding: 20px;
+
+      .mobile-menu-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        cursor: pointer;
+      }
+
+      .mobile-menu-btn:hover {
+        background: var(--surface-hover);
       }
     }
     
@@ -1293,6 +1333,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
 </head>
 <body>
   <div class="layout">
+    <div id="mobile-menu-backdrop" class="mobile-backdrop" onclick="closeMobileMenu()"></div>
+
     <!-- Sidebar -->
     <aside class="sidebar">
       <div class="brand">
@@ -1305,7 +1347,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
       <nav>
         <div class="nav-section">
           <div class="nav-title">Menu Principal</div>
-          <button class="nav-item active" onclick="showSection('dashboard')">
+          <button class="nav-item active" data-section="dashboard" onclick="showSection('dashboard')">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="7" height="7" rx="1"/>
               <rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -1314,13 +1356,13 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
             </svg>
             Dashboard
           </button>
-          <button class="nav-item" onclick="showSection('queues')">
+          <button class="nav-item" data-section="queues" onclick="showSection('queues')">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
             </svg>
             Filas
           </button>
-          <button class="nav-item" onclick="showSection('mediators')">
+          <button class="nav-item" data-section="mediators" onclick="showSection('mediators')">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
               <circle cx="9" cy="7" r="4"/>
@@ -1328,7 +1370,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
             </svg>
             Mediadores
           </button>
-          <button class="nav-item" onclick="showSection('embeds')">
+          <button class="nav-item" data-section="embeds" onclick="showSection('embeds')">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
               <line x1="3" y1="9" x2="21" y2="9"/>
@@ -1360,6 +1402,13 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
       
       <!-- Header -->
       <div class="header">
+        <button type="button" class="mobile-menu-btn" onclick="openMobileMenu()" aria-label="Abrir menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
         <div class="header-content">
           <h2>Dashboard</h2>
           <p>Gerenciando servidor: <strong>${escapeHtml(guild.name)}</strong></p>
@@ -1792,7 +1841,7 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
       document.getElementById('section-' + sectionName).classList.add('active');
       
       // Update nav
-      event.target.closest('.nav-item')?.classList.add('active');
+      document.querySelector('.nav-item[data-section="' + sectionName + '"]')?.classList.add('active');
       
       // Update header title
       const titles = {
@@ -1802,6 +1851,8 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
         'embeds': 'Aparência'
       };
       document.querySelector('.header-content h2').textContent = titles[sectionName];
+
+      closeMobileMenu();
     }
 
     // Alert system
@@ -1824,6 +1875,16 @@ function renderDashboard({ guild, config, embedSettings, queues, mediators, stat
         alert.classList.remove('show');
         setTimeout(() => alert.remove(), 300);
       }, 4000);
+    }
+
+    function openMobileMenu() {
+      document.querySelector('.sidebar')?.classList.add('open');
+      document.getElementById('mobile-menu-backdrop')?.classList.add('visible');
+    }
+
+    function closeMobileMenu() {
+      document.querySelector('.sidebar')?.classList.remove('open');
+      document.getElementById('mobile-menu-backdrop')?.classList.remove('visible');
     }
 
     // Form handling
